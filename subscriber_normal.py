@@ -123,7 +123,7 @@ def lidar_callback(point_cloud, args):
     # o3d.io.write_point_cloud(filepass + "/" + str(ros_time) + "_" + get_device_time("conv_str_milli")[:-3] + ".pcd", pcd)
 
 def ros_process(g_gps_time, g_gps_lat, g_gps_lon, log_filepass, pcd_filepass):
-    rospy.init_node('position_sub')
+    rospy.init_node('research_subscriber')
 
     rospy.Subscriber('/Odometry', Odometry , odometry_callback, (g_gps_time, g_gps_lat, g_gps_lon, log_filepass))
     rospy.Subscriber('/livox/imu', Imu , imu_callback, (g_gps_time, g_gps_lat, g_gps_lon, log_filepass))
