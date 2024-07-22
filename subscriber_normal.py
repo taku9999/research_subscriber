@@ -13,7 +13,6 @@ import datetime
 import time
 import os
 from multiprocessing import Process, Value, Array
-import ros_numpy
 
 
 DEVICE = o3d.core.Device("CUDA:0")
