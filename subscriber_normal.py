@@ -55,10 +55,11 @@ def get_device_time(cmd):
 
 
 def callback_odometry(message, args):
-    gps_time = args[0]
-    gps_lat = args[1]
-    gps_lon = args[2]
-    filepass = args[3]
+    ros_time = args[0]
+    gps_time = args[1]
+    gps_lat = args[2]
+    gps_lon = args[3]
+    filepass = args[4]
 
     timestamp = message.header.stamp # ROS時間
     position = message.pose.pose.position # 位置情報
@@ -66,6 +67,9 @@ def callback_odometry(message, args):
 
     # クォータニオンをオイラー角に変換
     euler = tf.transformations.euler_from_quaternion((orientation.x, orientation.y, orientation.z, orientation.w))
+    
+    # 共有メモリにROS_timeを保存
+    ros_time.value = float(str(timestamp.secs) + "." + str(timestamp.nsecs).zfill(9)[:3])
 
     print("=== Odometry data receive ===")
     print(" :: GPS情報: time={}, lat={}, lon={}".format(gps_time.value.decode('utf-8'), gps_lat.value, gps_lon.value))
@@ -102,16 +106,16 @@ def callback_lidar(point_cloud, args):
     o3d.t.io.write_point_cloud(filepass + "/" + str(ros_time.secs) + "-" + str(ros_time.nsecs).zfill(9)[:3] + "_" + get_device_time("conv_str_milli")[:-3] + ".pcd", pcd_t)
 
 
-def process_ros(g_gps_time, g_gps_lat, g_gps_lon, log_filepass, pcd_filepass):
+def process_ros(g_ros_time, g_gps_time, g_gps_lat, g_gps_lon, log_filepass, pcd_filepass):
     rospy.init_node('research_subscriber')
 
-    rospy.Subscriber('/Odometry', Odometry , callback_odometry, (g_gps_time, g_gps_lat, g_gps_lon, log_filepass))
+    rospy.Subscriber('/Odometry', Odometry , callback_odometry, (g_ros_time, g_gps_time, g_gps_lat, g_gps_lon, log_filepass))
     rospy.Subscriber('/livox/lidar', CustomMsg, callback_lidar, (pcd_filepass, ))
 
     rospy.spin()
 
 
-def process_gps(g_gps_time, g_gps_lat, g_gps_lon):
+def process_gps(g_ros_time, g_gps_time, g_gps_lat, g_gps_lon, log_filepass):
     try:
         gps_socket = gps3.GPSDSocket()
         data_stream = gps3.DataStream()
@@ -146,6 +150,12 @@ def process_gps(g_gps_time, g_gps_lat, g_gps_lon):
             else:
                 g_gps_lat.value = gps_lat # 共有メモリ(float)
                 g_gps_lon.value = gps_lon # 共有メモリ(float)
+            
+            # GPS情報とROS_Time情報をログ記録
+            with open(log_filepass + "/gps_log.csv", mode="a") as f:
+                f.write(str(g_ros_time.value))                                           # ROS時間 (共有メモリ)
+                f.write("," + str(gps_time) + "," + str(gps_lat) + "," + str(gps_lon))   # GPS情報 (str, float)
+                f.write("," + str(get_device_time("unix_time")) + "\r\n")                # デバイス時間 (float)
 
 
 def main():
@@ -163,16 +173,17 @@ def main():
     init_cuda()
 
     # 共有メモリの設定
+    m_ros_time = Value('d', 0.0)
     m_gps_time = Array('c', b"0000-00-00_00-00-00")
     m_gps_lat = Value('d', 0.0)
     m_gps_lon = Value('d', 0.0)
 
     # GPSプロセスの設定
-    p_gps = Process(target=process_gps, args=(m_gps_time, m_gps_lat, m_gps_lon))
+    p_gps = Process(target=process_gps, args=(m_ros_time, m_gps_time, m_gps_lat, m_gps_lon, log_filepass))
     p_gps.start()
 
     # ROSプロセスの設定
-    p_ros = Process(target=process_ros, args=(m_gps_time, m_gps_lat, m_gps_lon, log_filepass, pcd_filepass))
+    p_ros = Process(target=process_ros, args=(m_ros_time, m_gps_time, m_gps_lat, m_gps_lon, log_filepass, pcd_filepass))
     p_ros.start()
 
 
