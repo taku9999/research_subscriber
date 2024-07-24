@@ -20,6 +20,8 @@ DTYPE = o3d.core.float32
 
 LOG_DIRS = "/workspace/bind_data"
 
+PCD_SAVE = True
+
 
 def init_cuda():
     print("=== [init_cuda] ===")
@@ -103,7 +105,8 @@ def callback_lidar(point_cloud, args):
     pcd_t.point.positions = o3d.core.Tensor(points)
     pcd_t.point.intensity = o3d.core.Tensor(intensities)
 
-    o3d.t.io.write_point_cloud(filepass + "/" + str(ros_time.secs) + "-" + str(ros_time.nsecs).zfill(9)[:3] + "_" + get_device_time("conv_str_milli")[:-3] + ".pcd", pcd_t)
+    if PCD_SAVE :
+        o3d.t.io.write_point_cloud(filepass + "/" + str(ros_time.secs) + "-" + str(ros_time.nsecs).zfill(9)[:3] + "_" + get_device_time("conv_str_milli")[:-3] + ".pcd", pcd_t)
 
 
 def process_ros(g_ros_time, g_gps_time, g_gps_lat, g_gps_lon, log_filepass, pcd_filepass):
