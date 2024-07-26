@@ -16,7 +16,8 @@ DTYPE = o3d.core.float32
 
 LOG_DIRS = "/workspace/bind_data"
 
-COUPLING_NUM = 6
+PUBLISH_HZ = 60
+TARGET_HZ = 5
 
 
 def init_cuda():
@@ -84,8 +85,10 @@ def process_ros(q_pointcloud):
 
 
 def process_pcd(q_pointcloud, pcd_filepass):
+    coupling_num = PUBLISH_HZ / TARGET_HZ
+    
     while 1:
-        if q_pointcloud.qsize() >= COUPLING_NUM:
+        if q_pointcloud.qsize() >= coupling_num:
             pcd_t_save = o3d.t.geometry.PointCloud(DEVICE)
             temp = q_pointcloud.get()
             pcd_t_save = temp
@@ -111,9 +114,7 @@ def main():
     q_pointcloud = manager.Queue()
     
     # PCDファイルパスの設定
-    log_filepass = LOG_DIRS + "/" + str(get_device_time("conv_str"))
-    os.makedirs(log_filepass)
-    pcd_filepass = log_filepass + "/pcd_data"
+    pcd_filepass = LOG_DIRS + "/" + str(get_device_time("conv_str") + "_" + str(TARGET_HZ) + "Hz")
     os.makedirs(pcd_filepass)
     print(" :: [Debug] PCD file save to: {}".format(pcd_filepass))
 
