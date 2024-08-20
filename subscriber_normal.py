@@ -74,14 +74,14 @@ def callback_odometry(message, args):
     ros_time.value = float(str(timestamp.secs) + "." + str(timestamp.nsecs).zfill(9)[:3])
 
     print("=== Odometry data receive ===")
-    print(" :: GPS情報: time={}, lat={}, lon={}".format(gps_time.value.decode('utf-8'), gps_lat.value, gps_lon.value))
+    print(" :: GPS情報: time={}, lat={}, lon={}".format(gps_time.value.decode("utf-8"), gps_lat.value, gps_lon.value))
 
     with open(filepass + "/odometry_log.csv", mode="a") as f:
         f.write(str(timestamp.secs) + "." + str(timestamp.nsecs).zfill(9)[:3])                                             # ROS時間（genpy.rostime.Time）
         f.write("," + str(position.x) + "," + str(position.y) + "," + str(position.z))                                     # 位置情報（float）
         f.write("," + str(orientation.x) + "," + str(orientation.y) + "," + str(orientation.z) + "," + str(orientation.w)) # 姿勢情報（float）
         f.write("," + str(euler[0]) + "," + str(euler[1]) + "," + str(euler[2]))                                           # オイラー変換後（float）
-        f.write("," + gps_time.value.decode('utf-8') + "," + str(gps_lat.value) + "," + str(gps_lon.value))                # GPS情報（str, float）
+        f.write("," + gps_time.value.decode("utf-8") + "," + str(gps_lat.value) + "," + str(gps_lon.value))                # GPS情報（str, float）
         f.write("," + str(get_device_time("unix_time")) + "\r\n")                                                          # デバイス時間（float）
 
 
@@ -93,8 +93,8 @@ def callback_lidar(point_cloud, args):
     num_points = point_cloud.point_num # Pointの数
 
     # tensorを用いて点群をpcdに保存
-    points = np.zeros((num_points, 3), dtype='float32')
-    intensities = np.zeros((num_points, 1), dtype='float32')
+    points = np.zeros((num_points, 3), dtype="float32")
+    intensities = np.zeros((num_points, 1), dtype="float32")
     for i, point in enumerate(point_cloud.points):
         points[i, 0] = point.x
         points[i, 1] = point.y
@@ -110,10 +110,10 @@ def callback_lidar(point_cloud, args):
 
 
 def process_ros(g_ros_time, g_gps_time, g_gps_lat, g_gps_lon, log_filepass, pcd_filepass):
-    rospy.init_node('research_subscriber')
+    rospy.init_node("research_subscriber")
 
-    rospy.Subscriber('/Odometry', Odometry , callback_odometry, (g_ros_time, g_gps_time, g_gps_lat, g_gps_lon, log_filepass))
-    rospy.Subscriber('/livox/lidar', CustomMsg, callback_lidar, (pcd_filepass, ))
+    rospy.Subscriber("/Odometry", Odometry , callback_odometry, (g_ros_time, g_gps_time, g_gps_lat, g_gps_lon, log_filepass))
+    rospy.Subscriber("/livox/lidar", CustomMsg, callback_lidar, (pcd_filepass, ))
 
     rospy.spin()
 
@@ -127,27 +127,27 @@ def process_gps(g_ros_time, g_gps_time, g_gps_lat, g_gps_lon, log_filepass):
     except :
         print("Initialization Error")
     
-    date_format = '%Y-%m-%d %H:%M:%S.%f'
+    date_format = "%Y-%m-%d %H:%M:%S.%f"
     
     for new_data in gps_socket:
         if new_data:
             data_stream.unpack(new_data)
-            gps_time = data_stream.TPV['time']
-            gps_lat = data_stream.TPV['lat']
-            gps_lon = data_stream.TPV['lon']
+            gps_time = data_stream.TPV["time"]
+            gps_lat = data_stream.TPV["lat"]
+            gps_lon = data_stream.TPV["lon"]
 
             # 時刻
-            if gps_time == 'n/a':
+            if gps_time == "n/a":
                 gps_time = 0.0
             else:
-                tmp_time = str(gps_time).replace('T', ' ')[:-1]
+                tmp_time = str(gps_time).replace("T", " ")[:-1]
                 tmp_time = datetime.datetime.strptime(tmp_time, date_format)
                 tmp_time = tmp_time + datetime.timedelta(hours=9)
                 gps_time = tmp_time.strftime("%Y-%m-%d_%H-%M-%S")
-                g_gps_time.value = bytes(gps_time, 'utf-8') # 共有メモリ(str)
+                g_gps_time.value = bytes(gps_time, "utf-8") # 共有メモリ(str)
 
             # 緯度＆経度
-            if gps_lat == 'n/a' and gps_lon == 'n/a':
+            if gps_lat == "n/a" and gps_lon == "n/a":
                 gps_lat = 0.0
                 gps_lon = 0.0
             else:
@@ -176,10 +176,10 @@ def main():
     init_cuda()
 
     # 共有メモリの設定
-    m_ros_time = Value('d', 0.0)
-    m_gps_time = Array('c', b"0000-00-00_00-00-00")
-    m_gps_lat = Value('d', 0.0)
-    m_gps_lon = Value('d', 0.0)
+    m_ros_time = Value("d", 0.0)
+    m_gps_time = Array("c", b"0000-00-00_00-00-00")
+    m_gps_lat = Value("d", 0.0)
+    m_gps_lon = Value("d", 0.0)
 
     # GPSプロセスの設定
     p_gps = Process(target=process_gps, args=(m_ros_time, m_gps_time, m_gps_lat, m_gps_lon, log_filepass))

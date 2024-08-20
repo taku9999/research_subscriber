@@ -9,6 +9,7 @@ import datetime
 import time
 import os
 import torch.multiprocessing as mp
+from multiprocessing import Process, Value, Array
 
 
 DEVICE = o3d.core.Device("CUDA:0")
@@ -17,7 +18,7 @@ DTYPE = o3d.core.float32
 LOG_DIRS = "/workspace/bind_data"
 
 PUBLISH_HZ = 60
-TARGET_HZ = 5
+TARGET_HZ = 10
 
 
 def init_cuda():
@@ -55,12 +56,17 @@ def get_device_time(cmd):
 
 def callback_lidar(point_cloud, args):
     que = args[0]
+    ros_time = args[1]
     
     num_points = point_cloud.point_num # Pointの数
+    
+    # 共有メモリにROS_timeを保存
+    timestamp = point_cloud.header.stamp
+    ros_time.value = float(str(timestamp.secs) + "." + str(timestamp.nsecs).zfill(9)[:3])
 
     # tensorを用いて点群をpcdに保存
-    points = np.zeros((num_points, 3), dtype='float32')
-    intensities = np.zeros((num_points, 1), dtype='float32')
+    points = np.zeros((num_points, 3), dtype="float32")
+    intensities = np.zeros((num_points, 1), dtype="float32")
     for i, point in enumerate(point_cloud.points):
         points[i, 0] = point.x
         points[i, 1] = point.y
@@ -70,21 +76,21 @@ def callback_lidar(point_cloud, args):
     pcd_t = o3d.t.geometry.PointCloud(DEVICE)
     pcd_t.point.positions = o3d.core.Tensor(points, DTYPE, DEVICE)
     pcd_t.point.intensity = o3d.core.Tensor(intensities, DTYPE, DEVICE)
-    
 
+    # キューに追加
     que.put(pcd_t)
     print(" :: [ADD] Now queue size :" + str(que.qsize()))
 
 
-def process_ros(q_pointcloud):
+def process_ros(q_pointcloud, m_ros_time):
     init_cuda()
     
-    rospy.init_node('remake_pcd')
-    rospy.Subscriber('/livox/lidar', CustomMsg, callback_lidar, (q_pointcloud,))
+    rospy.init_node("research_subscriber")
+    rospy.Subscriber("/livox/lidar", CustomMsg, callback_lidar, (q_pointcloud, m_ros_time))
     rospy.spin()
 
 
-def process_pcd(q_pointcloud, pcd_filepass):
+def process_pcd(q_pointcloud, m_ros_time, pcd_filepass):
     coupling_num = PUBLISH_HZ / TARGET_HZ
     
     while 1:
@@ -101,30 +107,31 @@ def process_pcd(q_pointcloud, pcd_filepass):
                     break
         
             print("=== Que Get Success !! ===")
-            o3d.t.io.write_point_cloud(pcd_filepass + "/" + get_device_time("conv_str_milli")[:-3] + ".pcd", pcd_t_save)
-    
+            o3d.t.io.write_point_cloud(pcd_filepass + "/" + str(m_ros_time.value).replace(".", "_", 1) + ".pcd", pcd_t_save)
 
 
 def main():
-    if mp.get_start_method() == 'fork':
-        mp.set_start_method('spawn', force=True)
-        
+    if mp.get_start_method() == "fork":
+        mp.set_start_method("spawn", force=True)
+    
+    # キューの設定
     manager = mp.Manager()
-        
     q_pointcloud = manager.Queue()
+    
+    # 共有メモリの設定
+    m_ros_time = Value("d", 0.0)
     
     # PCDファイルパスの設定
     pcd_filepass = LOG_DIRS + "/" + str(get_device_time("conv_str") + "_" + str(TARGET_HZ) + "Hz")
     os.makedirs(pcd_filepass)
     print(" :: [Debug] PCD file save to: {}".format(pcd_filepass))
 
-
     # ROSプロセスの設定
-    p_ros = mp.Process(target=process_ros, args=(q_pointcloud, ))
+    p_ros = mp.Process(target=process_ros, args=(q_pointcloud, m_ros_time))
     p_ros.start()
     
     # PCDプロセスの設定
-    p_pcd = mp.Process(target=process_pcd, args=(q_pointcloud, pcd_filepass))
+    p_pcd = mp.Process(target=process_pcd, args=(q_pointcloud, m_ros_time, pcd_filepass))
     p_pcd.start()
     
     p_ros.join()
